@@ -280,13 +280,14 @@ thread_tid (void)
 void
 thread_exit (void) 
 {
-  ASSERT (!intr_context ());
-  sema_up(&thread_current()->parent->sema_wait_for_child);
+  
 
 #ifdef USERPROG
   process_exit ();
 #endif
-
+  printf("%s: exit(%d)\n", thread_current()->name, thread_current()->exit_status);
+  ASSERT (!intr_context ());
+  sema_up(&thread_current()->parent->sema_wait_for_child);
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */

@@ -3,6 +3,9 @@
         "syscall.h": "c",
         "string.h": "c",
         "stdio.h": "c",
-        "stdarg.h": "c"
+        "stdarg.h": "c",
+        "vaddr.h": "c",
+        "syscall-nr.h": "c",
+        "main.h": "c"
     }
 }

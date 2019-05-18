@@ -95,7 +95,7 @@ struct thread
     struct list_elem elem;              /* List element. */
     struct semaphore sema_wait_for_child;
     struct thread *parent;
-    
+    int exit_status;
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */

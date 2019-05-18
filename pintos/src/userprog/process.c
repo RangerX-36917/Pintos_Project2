@@ -61,7 +61,6 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  
   char *file_name = file_name_;
   char* fn_copy = (char*)malloc(strlen(file_name_)+1);
   strlcpy(fn_copy, file_name_, strlen(file_name_)+1);
@@ -73,7 +72,6 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  
   success = load (file_name, &if_.eip, &if_.esp);
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -90,27 +88,28 @@ start_process (void *file_name_)
     char* token;
     char* saved_ptr;
     //ASSERT(strcmp(fn_copy, "args-single onearg") == 0);
+    //printf("file name: %s \n", fn_copy);
     //printf("Initial:\nif_.esp %p\n", if_.esp);
-    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 64, true);
     /* Push arguments. */
     for(token = strtok_r(fn_copy, " ", &saved_ptr); token != NULL; token = strtok_r(NULL, " ", &saved_ptr)) 
     {
-      printf("token: %s len: %d\n", token, strlen(token));
       argv[argc] = palloc_get_page(0);
-      strlcpy(argv[argc], token, strlen(token) + 1);
-      printf("%s\n", argv[argc++]);
+      strlcpy(argv[argc++], token, strlen(token) + 1);
     }
     //printf("Push args\n");
-    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 64, true);
+    
     //printf("esp: %p need to align %d\n", if_.esp, (unsigned)if_.esp %4);
     //printf("esp: %p need to align %d\n", if_.esp, (int)if_.esp %4);
-    /* Word align. */
-    /* ! using (int) will produce negative align and is therefore buggy. */
+    
     for(int i = argc - 1; i >= 0; i--) {
       if_.esp -= strlen(argv[i]) + 1;
       memcpy(if_.esp, argv[i], strlen(argv[i]) + 1);
       addr[i] = if_.esp;
+      //hex_dump((uintptr_t)if_.esp - 30, if_.esp, sizeof(char) * 128, true);
+    
     }
+    /* Word align. */
+    /* ! using (int) will produce negative align and is therefore buggy. */
     if_.esp -= ((unsigned)if_.esp) % 4; 
     /* Push argument addresses. */
     /* Make sure argv[argc] = 0. */
@@ -131,15 +130,15 @@ start_process (void *file_name_)
     char* argv0 = if_.esp;
     if_.esp -= sizeof(char*);
     memcpy(if_.esp, &argv0, sizeof(char*)); // sizeof(char*) == sizeof(char**);
-    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 64, true);
+    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 128, true);
     if_.esp -= sizeof(int);
     memcpy(if_.esp, &argc, sizeof(int));
     
     //printf("Push argc\n");
-    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 64, true);
+    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 128, true);
     if_.esp -= sizeof(int);
     memcpy(if_.esp, &zero, sizeof(int));
-    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 512, true);
+    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 128, true);
   }
   
 
@@ -166,6 +165,7 @@ int
 process_wait (tid_t child_tid UNUSED) 
 {
   sema_down(&thread_current()->sema_wait_for_child);
+
   return -1;
 }
 
