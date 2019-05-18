@@ -5,7 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "fixed_point.h"
-
+#include "threads/synch.h"
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -93,7 +93,9 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-
+    struct semaphore sema_wait_for_child;
+    struct thread *parent;
+    
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */

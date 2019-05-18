@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "lib/string.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -28,20 +29,30 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
+  //ASSERT(strcmp(file_name, "args-single onearg") == 0);
+  char *fn_copy, *fn_copy2;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  fn_copy2 = palloc_get_page(0);
+  if ((fn_copy == NULL) || (fn_copy2 == NULL))
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
 
+  strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (fn_copy2, file_name, PGSIZE);
+  char* saved_ptr;
+  char* exec_name =strtok_r(fn_copy2, " ", &saved_ptr);
+  //(strcmp(exec_name, "args-single") == 0);
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (exec_name, PRI_DEFAULT, start_process, fn_copy);
+
+  //free(exec_name); //cause malloc error
+
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+  //ASSERT(1 == 2);
   return tid;
 }
 
@@ -50,7 +61,10 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
+  
   char *file_name = file_name_;
+  char* fn_copy = (char*)malloc(strlen(file_name_)+1);
+  strlcpy(fn_copy, file_name_, strlen(file_name_)+1);
   struct intr_frame if_;
   bool success;
 
@@ -59,12 +73,75 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+  
   success = load (file_name, &if_.eip, &if_.esp);
-
   /* If load failed, quit. */
   palloc_free_page (file_name);
+  
   if (!success) 
+  {
     thread_exit ();
+  }
+  else
+  {
+    int argc = 0;
+    void* addr[MAX_ARG_NUM];
+    char *argv[MAX_ARG_NUM];
+    char* token;
+    char* saved_ptr;
+    //ASSERT(strcmp(fn_copy, "args-single onearg") == 0);
+    //printf("Initial:\nif_.esp %p\n", if_.esp);
+    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 64, true);
+    /* Push arguments. */
+    for(token = strtok_r(fn_copy, " ", &saved_ptr); token != NULL; token = strtok_r(NULL, " ", &saved_ptr)) 
+    {
+      printf("token: %s len: %d\n", token, strlen(token));
+      argv[argc] = palloc_get_page(0);
+      strlcpy(argv[argc], token, strlen(token) + 1);
+      printf("%s\n", argv[argc++]);
+    }
+    //printf("Push args\n");
+    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 64, true);
+    //printf("esp: %p need to align %d\n", if_.esp, (unsigned)if_.esp %4);
+    //printf("esp: %p need to align %d\n", if_.esp, (int)if_.esp %4);
+    /* Word align. */
+    /* ! using (int) will produce negative align and is therefore buggy. */
+    for(int i = argc - 1; i >= 0; i--) {
+      if_.esp -= strlen(argv[i]) + 1;
+      memcpy(if_.esp, argv[i], strlen(argv[i]) + 1);
+      addr[i] = if_.esp;
+    }
+    if_.esp -= ((unsigned)if_.esp) % 4; 
+    /* Push argument addresses. */
+    /* Make sure argv[argc] = 0. */
+    int zero = 0;
+    if_.esp -= sizeof(int);
+    //printf("Push argv[argc]\n");
+    memcpy(if_.esp, &zero, sizeof(int));
+    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 64, true);
+    for(int i = argc - 1; i >= 0; i--)
+    {
+      if_.esp -= sizeof(char*);
+      memcpy(if_.esp, &addr[i], sizeof(char*));
+      palloc_free_page(argv[i]);
+    }
+    //printf("Push addrs\n");
+    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 64, true);
+    /* Push argv[0], argc and zero. */
+    char* argv0 = if_.esp;
+    if_.esp -= sizeof(char*);
+    memcpy(if_.esp, &argv0, sizeof(char*)); // sizeof(char*) == sizeof(char**);
+    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 64, true);
+    if_.esp -= sizeof(int);
+    memcpy(if_.esp, &argc, sizeof(int));
+    
+    //printf("Push argc\n");
+    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 64, true);
+    if_.esp -= sizeof(int);
+    memcpy(if_.esp, &zero, sizeof(int));
+    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 512, true);
+  }
+  
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -88,6 +165,7 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  sema_down(&thread_current()->sema_wait_for_child);
   return -1;
 }
 
@@ -208,6 +286,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 bool
 load (const char *file_name, void (**eip) (void), void **esp) 
 {
+  
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
@@ -221,14 +300,25 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+  
   /* Open executable file. */
-  file = filesys_open (file_name);
+  char *fn_copy = (char*)malloc(strlen(file_name)+1);
+  strlcpy (fn_copy, file_name, PGSIZE);
+  char* saved_ptr;
+  char* exec_name =(char*)malloc(strlen(fn_copy) + 1);
+  exec_name= strtok_r(fn_copy, " ", &saved_ptr);
+  
+  file = filesys_open (exec_name);
+  free(fn_copy);
   if (file == NULL) 
     {
+
       printf ("load: %s: open failed\n", file_name);
+
       goto done; 
     }
-
+  
+  file_deny_write(file);
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
