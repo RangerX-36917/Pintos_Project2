@@ -115,6 +115,7 @@ start_process (void *file_name_)
     /* Word align. */
     /* ! using (int) will produce negative align and is therefore buggy. */
     if_.esp -= ((unsigned)if_.esp) % 4; 
+    
     /* Push argument addresses. */
     /* Make sure argv[argc] = 0. */
     int zero = 0;
@@ -331,7 +332,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   char* saved_ptr;
   char* exec_name =(char*)malloc(strlen(fn_copy) + 1);
   exec_name= strtok_r(fn_copy, " ", &saved_ptr);
-  //acquire_file_lock ();
+  acquire_file_lock ();
   /* Open executable file. */
   file = filesys_open (exec_name); 
   if (file == NULL) 
@@ -424,8 +425,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-
-  //release_file_lock ();
+  release_file_lock ();
   return success;
 }
 

@@ -316,9 +316,9 @@ thread_exit (void)
   {
     elem = list_pop_front(files);
     struct opened_file *opened_file_ = list_entry (elem, struct opened_file, file_elem);
-    //acquire_file_lock();
+    acquire_file_lock();
     file_close(opened_file_->file);
-    //release_file_lock();
+    release_file_lock();
     free(opened_file_);
   }
 
