@@ -299,17 +299,33 @@ thread_exit (void)
 #endif
   intr_disable ();
   ASSERT (!intr_context ());
-  //printf("tid %d %s: exit(%d)\n", thread_current()->tid, thread_current()->name, 
+
   printf("%s: exit(%d)\n", thread_current()->name, thread_current()->exit_status);
+
+  /* Wake up waiting parent. */
   thread_current()->as_child->exit_status = thread_current()->exit_status;
   sema_up(&thread_current()->parent->sema_wait_for_child);
+  
+  /* Close executable file. */
+  file_close (thread_current()->exec_file);
+
+  struct list_elem * elem;
+  struct opened_file * file_;
+  struct list *files = &thread_current ()->files;
+  while(!list_empty(files))
+  {
+    elem = list_pop_front(files);
+    struct opened_file *opened_file_ = list_entry (elem, struct opened_file, file_elem);
+    //acquire_file_lock();
+    file_close(opened_file_->file);
+    //release_file_lock();
+    free(opened_file_);
+  }
+
+
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
-  acquire_file_lock ();
-  //file_close (thread_current()->exec_file);
-  release_file_lock ();
-  
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
   schedule ();
@@ -572,6 +588,15 @@ thread_schedule_tail (struct thread *prev)
   if (prev != NULL && prev->status == THREAD_DYING && prev != initial_thread) 
     {
       ASSERT (prev != cur);
+
+    while(!list_empty(&prev->child_processes))
+    {
+      struct list_elem *elem = list_pop_front(&prev->child_processes);
+      struct child_thread *child_thread_ = list_entry (elem, struct child_thread, as_child_elem);
+      palloc_free_page(child_thread_);
+    }
+
+
       palloc_free_page (prev);
     }
 }

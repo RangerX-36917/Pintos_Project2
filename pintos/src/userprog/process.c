@@ -29,8 +29,6 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  //printf("call execute with file:%s\n", file_name);
-  //ASSERT(strcmp(file_name, "args-single onearg") == 0);
   char *fn_copy, *fn_copy2;
   tid_t tid;
 
@@ -38,28 +36,32 @@ process_execute (const char *file_name)
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
   fn_copy2 = palloc_get_page(0);
-  if ((fn_copy == NULL) || (fn_copy2 == NULL))
+  if (fn_copy == NULL)
+  {
+    palloc_free_page (fn_copy); 
     return TID_ERROR;
+  }
 
+  if(fn_copy2 == NULL)
+  {
+    palloc_free_page (fn_copy2);
+    return TID_ERROR;
+  }
+    
   strlcpy (fn_copy, file_name, PGSIZE);
   strlcpy (fn_copy2, file_name, PGSIZE);
   char* saved_ptr;
   char* exec_name =strtok_r(fn_copy2, " ", &saved_ptr);
-  //(strcmp(exec_name, "args-single") == 0);
+
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (exec_name, PRI_DEFAULT, start_process, fn_copy);
 
-  //free(exec_name); //cause malloc error
-
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
   sema_down(&thread_current()->sema_exec);
   if(!thread_current()->exec_success)
   {
     return TID_ERROR;
   }
-  //printf("call process execute, execute thread %d\n", tid);
-  //ASSERT(1 == 2);
+
   return tid;
 }
 
@@ -80,8 +82,7 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
-  
-  palloc_free_page (file_name);
+
   /* If load failed, quit. */
   if (!success) 
   {
@@ -97,25 +98,18 @@ start_process (void *file_name_)
     char *argv[MAX_ARG_NUM];
     char* token;
     char* saved_ptr;
-    //ASSERT(strcmp(fn_copy, "args-single onearg") == 0);
-    //printf("file name: %s \n", fn_copy);
-    //printf("Initial:\nif_.esp %p\n", if_.esp);
+    
     /* Push arguments. */
     for(token = strtok_r(fn_copy, " ", &saved_ptr); token != NULL; token = strtok_r(NULL, " ", &saved_ptr)) 
     {
       argv[argc] = palloc_get_page(0);
       strlcpy(argv[argc++], token, strlen(token) + 1);
     }
-    //printf("Push args\n");
-    
-    //printf("esp: %p need to align %d\n", if_.esp, (unsigned)if_.esp %4);
-    //printf("esp: %p need to align %d\n", if_.esp, (int)if_.esp %4);
     
     for(int i = argc - 1; i >= 0; i--) {
       if_.esp -= strlen(argv[i]) + 1;
       memcpy(if_.esp, argv[i], strlen(argv[i]) + 1);
       addr[i] = if_.esp;
-      //hex_dump((uintptr_t)if_.esp - 30, if_.esp, sizeof(char) * 128, true);
     
     }
     /* Word align. */
@@ -125,27 +119,22 @@ start_process (void *file_name_)
     /* Make sure argv[argc] = 0. */
     int zero = 0;
     if_.esp -= sizeof(int);
-    //printf("Push argv[argc]\n");
     memcpy(if_.esp, &zero, sizeof(int));
-    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 64, true);
     for(int i = argc - 1; i >= 0; i--)
     {
       if_.esp -= sizeof(char*);
       memcpy(if_.esp, &addr[i], sizeof(char*));
       palloc_free_page(argv[i]);
     }
-    //printf("Push addrs\n");
-    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 64, true);
+    
     /* Push argv[0], argc and zero. */
     char* argv0 = if_.esp;
     if_.esp -= sizeof(char*);
     memcpy(if_.esp, &argv0, sizeof(char*)); // sizeof(char*) == sizeof(char**);
-    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 128, true);
+    
     if_.esp -= sizeof(int);
     memcpy(if_.esp, &argc, sizeof(int));
-    
-    //printf("Push argc\n");
-    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 128, true);
+
     if_.esp -= sizeof(int);
     memcpy(if_.esp, &zero, sizeof(int));
     thread_current()->parent->exec_success = true;
@@ -160,7 +149,7 @@ start_process (void *file_name_)
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
-  //printf("jump!\n");
+
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -177,7 +166,7 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  //printf("%s call process wait on %d\n", thread_current()->name, child_tid);
+
   struct list_elem *elem;
   struct list *l = &thread_current()->child_processes;
   struct child_thread *child;
@@ -188,10 +177,8 @@ process_wait (tid_t child_tid UNUSED)
     child = list_entry(elem, struct child_thread, as_child_elem);
     if(child->tid == child_tid) {
       found = true;
-      //printf("found! %d \n", child->tid);
       sema_down(&thread_current()->sema_wait_for_child);
-      //printf("I wake up\n");
-      //printf("child exit, status: ", child->exit_status);
+
       break;
     }
   }
@@ -202,15 +189,11 @@ process_wait (tid_t child_tid UNUSED)
   }
   else
   {
-   // printf("child process %d returned!\n", child->tid);
     int status = child->exit_status;
     list_remove(elem);
     return status;
   }
-  
-  //sema_down(&thread_current()->sema_wait_for_child);
 
-  //return -1;
 }
 
 /* Free the current process's resources. */
@@ -343,22 +326,20 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
-
-  acquire_file_lock ();
-  /* Open executable file. */
   char *fn_copy = (char*)malloc(strlen(file_name)+1);
   strlcpy (fn_copy, file_name, PGSIZE);
   char* saved_ptr;
   char* exec_name =(char*)malloc(strlen(fn_copy) + 1);
   exec_name= strtok_r(fn_copy, " ", &saved_ptr);
+  //acquire_file_lock ();
+  /* Open executable file. */
   file = filesys_open (exec_name); 
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", exec_name);
-       free(fn_copy);
       goto done; 
     }
-  
+  thread_current()->exec_file = file;
   file_deny_write(file);
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -440,11 +421,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
   *eip = (void (*) (void)) ehdr.e_entry;
 
   success = true;
-  //printf("load success");
+
  done:
   /* We arrive here whether the load is successful or not. */
-  //file_close (file);
-  release_file_lock ();
+
+  //release_file_lock ();
   return success;
 }
 
