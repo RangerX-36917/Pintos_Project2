@@ -29,6 +29,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   int fd;
   void* buffer;
   unsigned size;
+
   int *sp = f->esp;
   if(!is_valid_address(sp))
     bad_exit();
@@ -92,7 +93,10 @@ void bad_exit()
 bool is_valid_address(void* p)
 {
   if(!p || !is_user_vaddr(p) || !is_user_vaddr(p + 4) || !is_user_vaddr(p+1) || (pagedir_get_page(thread_current()->pagedir, p) == NULL))
+  {
     return false;
+  }
+    
   return true;
 }
 

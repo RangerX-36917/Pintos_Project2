@@ -178,30 +178,31 @@ int
 process_wait (tid_t child_tid UNUSED) 
 {
   //printf("%s call process wait on %d\n", thread_current()->name, child_tid);
-  //printf("call process wait on tid: %d\n", child_tid);
   struct list_elem *elem;
   struct list *l = &thread_current()->child_processes;
-  struct thread *child;
+  struct child_thread *child;
   
   bool found = false;
   for(elem = list_begin(l); elem != list_end(l); elem = list_next(elem))
   {
-    child = list_entry(elem, struct thread, as_child_elem);
+    child = list_entry(elem, struct child_thread, as_child_elem);
     if(child->tid == child_tid) {
       found = true;
-      //printf("found!\n");
+      //printf("found! %d \n", child->tid);
       sema_down(&thread_current()->sema_wait_for_child);
+      //printf("I wake up\n");
+      //printf("child exit, status: ", child->exit_status);
       break;
     }
   }
   
-  if(found)
+  if(!found || elem == list_end(l))
   {
     return TID_ERROR;
   }
   else
   {
-    //printf("child process %d returned!\n", child->tid);
+   // printf("child process %d returned!\n", child->tid);
     int status = child->exit_status;
     list_remove(elem);
     return status;

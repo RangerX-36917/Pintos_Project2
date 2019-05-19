@@ -188,7 +188,12 @@ tid_t
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
-  list_push_back(&thread_current()->child_processes, &t->as_child_elem);
+  struct child_thread *ct;
+  ct = palloc_get_page(PAL_ZERO);
+  ct->tid = t->tid;
+  ct->exit_status = 0;
+  t->as_child = ct;
+  list_push_back(&thread_current()->child_processes, &ct->as_child_elem);
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -294,8 +299,9 @@ thread_exit (void)
 #endif
   intr_disable ();
   ASSERT (!intr_context ());
-  
+  //printf("tid %d %s: exit(%d)\n", thread_current()->tid, thread_current()->name, 
   printf("%s: exit(%d)\n", thread_current()->name, thread_current()->exit_status);
+  thread_current()->as_child->exit_status = thread_current()->exit_status;
   sema_up(&thread_current()->parent->sema_wait_for_child);
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
