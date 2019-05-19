@@ -26,6 +26,7 @@ void bad_exit();
 bool is_valid_address(void *);
 int write(struct intr_frame *);
 int open(const char *);
+int create(const char *, int);
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
@@ -58,6 +59,9 @@ syscall_handler (struct intr_frame *f UNUSED)
       f->eax = process_wait(*sp);
       break;
     case SYS_CREATE:
+      if(!is_valid_address(sp) || !is_valid_address(sp + 1))
+        bad_exit();
+        f->eax = create((const char*)*sp, *(sp+1));
       break;
     case SYS_REMOVE:
       break;
@@ -113,6 +117,15 @@ int write(struct intr_frame *f)
     return size;
   }
   return size;
+}
+/* Create a file. */
+int create(const char* name, int size)
+{
+  
+  acquire_file_lock();
+  int code = filesys_create(name, size);
+  release_file_lock();
+  return code;
 }
 /* Open a file. Return the file descriptor. */
 int open(const char *file_name)
