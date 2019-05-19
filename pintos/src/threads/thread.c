@@ -495,7 +495,9 @@ init_thread (struct thread *t, const char *name, int priority)
   sema_init(&t->sema_wait_for_child, 0);
   t->exit_status = 0;
   t->exec_success = false;
+  t->fd_next = 2;  
   list_init(&t->child_processes);
+  list_init(&t->files);
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);

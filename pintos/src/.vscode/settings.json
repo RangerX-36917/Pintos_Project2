@@ -8,6 +8,7 @@
         "syscall-nr.h": "c",
         "main.h": "c",
         "pagedir.h": "c",
-        "thread": "c"
+        "thread": "c",
+        "file.h": "c"
     }
 }

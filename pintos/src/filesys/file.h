@@ -1,10 +1,15 @@
 #ifndef FILESYS_FILE_H
 #define FILESYS_FILE_H
-
+#include <list.h>
 #include "filesys/off_t.h"
 
 struct inode;
-
+struct opened_file
+{
+    int fd;
+    struct file* file;
+    struct list_elem file_elem;
+};
 /* Opening and closing files. */
 struct file *file_open (struct inode *);
 struct file *file_reopen (struct file *);

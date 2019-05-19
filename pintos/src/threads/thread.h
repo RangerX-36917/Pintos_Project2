@@ -105,8 +105,10 @@ struct thread
     struct thread *parent;
     int exit_status;
     struct list child_processes;
+    struct list files;
     struct file *exec_file;
     struct child_thread* as_child;
+    int fd_next;
     
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
