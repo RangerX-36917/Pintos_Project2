@@ -85,8 +85,9 @@ start_process (void *file_name_)
   /* If load failed, quit. */
   if (!success) 
   {
-    thread_current()->exec_success = false;
-    sema_up(&thread_current()->sema_exec);
+    thread_current()->parent->exec_success = false;
+    sema_up(&thread_current()->parent->sema_exec);
+    thread_current()->exit_status = -1;
     thread_exit ();
   }
   else
@@ -349,12 +350,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
   char* saved_ptr;
   char* exec_name =(char*)malloc(strlen(fn_copy) + 1);
   exec_name= strtok_r(fn_copy, " ", &saved_ptr);
-  printf("try to load file: %s\n", exec_name);
-  file = filesys_open (exec_name);
-  free(fn_copy);
+  file = filesys_open (exec_name); 
   if (file == NULL) 
     {
-      printf ("load: %s: open failed\n", file_name);      
+      printf ("load: %s: open failed\n", exec_name);
+       free(fn_copy);
       goto done; 
     }
   

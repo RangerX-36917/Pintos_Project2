@@ -301,7 +301,7 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   acquire_file_lock ();
-  file_close (thread_current()->exec_file);
+  //file_close (thread_current()->exec_file);
   release_file_lock ();
   
   list_remove (&thread_current()->allelem);
