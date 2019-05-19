@@ -6,6 +6,7 @@
         "stdarg.h": "c",
         "vaddr.h": "c",
         "syscall-nr.h": "c",
-        "main.h": "c"
+        "main.h": "c",
+        "pagedir.h": "c"
     }
 }
