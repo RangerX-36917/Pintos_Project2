@@ -42,13 +42,20 @@ syscall_handler (struct intr_frame *f UNUSED)
       thread_exit ();
       break;
     case SYS_EXEC:
-      if(!is_valid_address((void *)sp) ||
-      is_valid_address((void*)*sp))
-        bad_exit;
+      if(!is_valid_address((void *)*sp))
+      //is_valid_address((void*)*sp))
+      {
+//        printf("bad exec");
+        bad_exit();
+      }
+        
       f->eax = process_execute((char*)*sp);
       break;
       break;
     case SYS_WAIT:
+      if(!is_valid_address((void *)sp))
+        bad_exit();
+      f->eax = process_wait(*sp);
       break;
     case SYS_CREATE:
       break;

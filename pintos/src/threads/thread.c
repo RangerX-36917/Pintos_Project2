@@ -11,6 +11,8 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -36,6 +38,9 @@ static struct thread *initial_thread;
 
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
+
+/* Lock used as global file lock. */
+static struct lock global_file_lock;
 
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
@@ -90,6 +95,7 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
+  lock_init (&global_file_lock);
   list_init (&ready_list);
   list_init (&all_list);
 
@@ -163,7 +169,7 @@ thread_print_stats (void)
    PRIORITY, but no actual priority scheduling is implemented.
    Priority scheduling is the goal of Problem 1-3. */
 tid_t
-thread_create (const char *name, int priority,
+  thread_create (const char *name, int priority,
                thread_func *function, void *aux) 
 {
   struct thread *t;
@@ -182,6 +188,7 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+  list_push_back(&thread_current()->child_processes, &t->as_child_elem);
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -285,13 +292,18 @@ thread_exit (void)
 #ifdef USERPROG
   process_exit ();
 #endif
-  printf("%s: exit(%d)\n", thread_current()->name, thread_current()->exit_status);
+  intr_disable ();
   ASSERT (!intr_context ());
+  
+  printf("%s: exit(%d)\n", thread_current()->name, thread_current()->exit_status);
   sema_up(&thread_current()->parent->sema_wait_for_child);
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
-  intr_disable ();
+  acquire_file_lock ();
+  file_close (thread_current()->exec_file);
+  release_file_lock ();
+  
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
   schedule ();
@@ -473,8 +485,11 @@ init_thread (struct thread *t, const char *name, int priority)
   {
     t->parent = NULL;
   }
+  sema_init(&t->sema_exec, 0);
   sema_init(&t->sema_wait_for_child, 0);
-  
+  t->exit_status = 0;
+  t->exec_success = false;
+  list_init(&t->child_processes);
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
@@ -588,6 +603,15 @@ allocate_tid (void)
   lock_release (&tid_lock);
 
   return tid;
+}
+void acquire_file_lock (void)
+{
+  lock_acquire(&global_file_lock);
+}
+
+void release_file_lock(void)
+{
+  lock_release(&global_file_lock);
 }
 
 /* Offset of `stack' member within `struct thread'.

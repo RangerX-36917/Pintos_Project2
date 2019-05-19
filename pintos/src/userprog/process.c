@@ -29,6 +29,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
+  //printf("call execute with file:%s\n", file_name);
   //ASSERT(strcmp(file_name, "args-single onearg") == 0);
   char *fn_copy, *fn_copy2;
   tid_t tid;
@@ -52,6 +53,12 @@ process_execute (const char *file_name)
 
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+  sema_down(&thread_current()->sema_exec);
+  if(!thread_current()->exec_success)
+  {
+    return TID_ERROR;
+  }
+  //printf("call process execute, execute thread %d\n", tid);
   //ASSERT(1 == 2);
   return tid;
 }
@@ -73,11 +80,13 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
-  /* If load failed, quit. */
-  palloc_free_page (file_name);
   
+  palloc_free_page (file_name);
+  /* If load failed, quit. */
   if (!success) 
   {
+    thread_current()->exec_success = false;
+    sema_up(&thread_current()->sema_exec);
     thread_exit ();
   }
   else
@@ -138,7 +147,9 @@ start_process (void *file_name_)
     //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 128, true);
     if_.esp -= sizeof(int);
     memcpy(if_.esp, &zero, sizeof(int));
-    //hex_dump((uintptr_t)if_.esp, if_.esp, sizeof(char) * 128, true);
+    thread_current()->parent->exec_success = true;
+    sema_up(&thread_current()->parent->sema_exec);
+    
   }
   
 
@@ -148,6 +159,7 @@ start_process (void *file_name_)
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
+  //printf("jump!\n");
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -164,9 +176,39 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  sema_down(&thread_current()->sema_wait_for_child);
+  //printf("%s call process wait on %d\n", thread_current()->name, child_tid);
+  //printf("call process wait on tid: %d\n", child_tid);
+  struct list_elem *elem;
+  struct list *l = &thread_current()->child_processes;
+  struct thread *child;
+  
+  bool found = false;
+  for(elem = list_begin(l); elem != list_end(l); elem = list_next(elem))
+  {
+    child = list_entry(elem, struct thread, as_child_elem);
+    if(child->tid == child_tid) {
+      found = true;
+      //printf("found!\n");
+      sema_down(&thread_current()->sema_wait_for_child);
+      break;
+    }
+  }
+  
+  if(found)
+  {
+    return TID_ERROR;
+  }
+  else
+  {
+    //printf("child process %d returned!\n", child->tid);
+    int status = child->exit_status;
+    list_remove(elem);
+    return status;
+  }
+  
+  //sema_down(&thread_current()->sema_wait_for_child);
 
-  return -1;
+  //return -1;
 }
 
 /* Free the current process's resources. */
@@ -300,21 +342,19 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
-  
+  acquire_file_lock ();
   /* Open executable file. */
   char *fn_copy = (char*)malloc(strlen(file_name)+1);
   strlcpy (fn_copy, file_name, PGSIZE);
   char* saved_ptr;
   char* exec_name =(char*)malloc(strlen(fn_copy) + 1);
   exec_name= strtok_r(fn_copy, " ", &saved_ptr);
-  
+  printf("try to load file: %s\n", exec_name);
   file = filesys_open (exec_name);
   free(fn_copy);
   if (file == NULL) 
     {
-
-      printf ("load: %s: open failed\n", file_name);
-
+      printf ("load: %s: open failed\n", file_name);      
       goto done; 
     }
   
@@ -399,10 +439,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
   *eip = (void (*) (void)) ehdr.e_entry;
 
   success = true;
-
+  //printf("load success");
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  //file_close (file);
+  release_file_lock ();
   return success;
 }
 

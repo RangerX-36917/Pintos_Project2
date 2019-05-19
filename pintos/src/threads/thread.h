@@ -94,8 +94,13 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     struct semaphore sema_wait_for_child;
+    struct semaphore sema_exec;
+    bool exec_success;
     struct thread *parent;
     int exit_status;
+    struct list_elem as_child_elem;
+    struct list child_processes;
+    struct file *exec_file;
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -140,5 +145,6 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
+void acquire_file_lock(void);
+void release_file_lock(void);
 #endif /* threads/thread.h */
